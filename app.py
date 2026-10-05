@@ -1,8 +1,4 @@
-"""
-Boston Housing Price Predictor  -  Streamlit app
-Run:  streamlit run app.py
-(first run  python train_model.py  to create model.joblib and metrics.json)
-"""
+
 import json
 from pathlib import Path
 
@@ -25,9 +21,8 @@ LABELS = {
     "PTRATIO": "Students per teacher",
 }
 
-# ----------------------------------------------------------------------------
-# Cached loaders: the model and data are read once, not on every click
-# ----------------------------------------------------------------------------
+ Cached loaders: the model and data are read once, not on every click
+
 @st.cache_resource
 def load_model():
     return joblib.load(BASE / "model.joblib")
@@ -50,12 +45,10 @@ if not (BASE / "model.joblib").exists():
 
 model, data, metrics = load_model(), load_data(), load_metrics()
 ranges = metrics["feature_ranges"]
-# slider bounds: whole numbers just outside the data range
+slider bounds: whole numbers just outside the data range
 bounds = {k: (float(np.floor(v[0])), float(np.ceil(v[1]))) for k, v in ranges.items()}
 
-# ----------------------------------------------------------------------------
-# Sidebar inputs
-# ----------------------------------------------------------------------------
+ Sidebar inputs
 EXAMPLES = {   # the three clients from the project brief
     "Client 1": (5.0, 17.0, 15.0),
     "Client 2": (4.0, 32.0, 22.0),
@@ -87,9 +80,7 @@ with st.sidebar:
     for col, name in zip(cols, EXAMPLES):
         col.button(name, on_click=load_example, args=(name,))
 
-# ----------------------------------------------------------------------------
-# Prediction
-# ----------------------------------------------------------------------------
+Prediction
 user = pd.DataFrame([[rm, lstat, ptratio]], columns=["RM", "LSTAT", "PTRATIO"])
 price = float(model.predict(user)[0])
 low = max(price + metrics["interval"]["low"], 0)
@@ -105,9 +96,7 @@ st.write(f"Estimates a neighborhood's median home value from three features. "
 tab_predict, tab_explore, tab_model = st.tabs(
     ["Your estimate", "Where it sits in the market", "How good is the model?"])
 
-# ----------------------------------------------------------------------------
-# Tab 1: the estimate
-# ----------------------------------------------------------------------------
+ Tab 1: the estimate
 with tab_predict:
     c1, c2, c3 = st.columns([1.3, 1, 1])
     c1.metric("Estimated price", f"${price:,.0f}")
@@ -117,7 +106,7 @@ with tab_predict:
 
     st.write(f"**Likely range (80% of the time):** ${low:,.0f} to ${high:,.0f}")
 
-    # price distribution with the estimate marked
+     price distribution with the estimate marked
     fig = px.histogram(data, x="MEDV", nbins=30, color_discrete_sequence=[GREY])
     fig.add_vline(x=price, line_color=AMBER, line_width=3,
                   annotation_text="Estimate", annotation_font_color=AMBER)
@@ -127,15 +116,13 @@ with tab_predict:
                       xaxis_title="Home price ($)", yaxis_title="Neighborhoods")
     st.plotly_chart(fig)
 
-    # inputs outside the training range -> be honest about it
+    inputs outside the training range -> be honest about it
     out = [LABELS[c] for c, v in zip(("RM", "LSTAT", "PTRATIO"), (rm, lstat, ptratio))
            if not ranges[c][0] <= v <= ranges[c][1]]
     if out:
         st.warning("Outside the range the model was trained on: " + ", ".join(out))
 
-# ----------------------------------------------------------------------------
 # Tab 2: feature scatter plots with the user's input marked
-# ----------------------------------------------------------------------------
 with tab_explore:
     st.write("Each dot is a neighborhood. The orange line is your input.")
     for feat, val, title in (("RM", rm, "Rooms vs. price"),
@@ -157,9 +144,7 @@ with tab_explore:
             st.metric("Correlation with price", f"{corr:+.2f}")
             st.caption(f"Price generally {direction} as this value goes up.")
 
-# ----------------------------------------------------------------------------
 # Tab 3: model quality
-# ----------------------------------------------------------------------------
 with tab_model:
     t = metrics["test"]
     m1, m2, m3 = st.columns(3)
