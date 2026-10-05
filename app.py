@@ -7,6 +7,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+from sklearn.ensemble import GradientBoostingRegressor
 
 st.set_page_config(page_title="Boston Housing Price Predictor",
                    page_icon="🏠", layout="wide")
@@ -16,10 +17,10 @@ BASE = Path(__file__).parent
 
 TEXT = "#2F2A25"
 MUTED = "#7A7167"
-SAGE = "#5B7F6B"        
-SAGE_SOFT = "#9DB5A6"   
-SAND = "#DDD3C3"        
-OCHRE = "#B7791F"       
+SAGE = "#5B7F6B"        # primary
+SAGE_SOFT = "#9DB5A6"   # scatter points
+SAND = "#DDD3C3"        # histogram bars
+OCHRE = "#B7791F"       # "your input" / estimate
 GRID = "#E7DFD2"
 PANEL = "#F3EDE3"
 BORDER = "#E4DACB"
@@ -99,11 +100,6 @@ def style(fig, height=340, price_axis=None):
 
 
 
-@st.cache_resource
-def load_model():
-    return joblib.load(BASE / "model.joblib")
-
-
 @st.cache_data
 def load_data():
     return pd.read_csv(BASE / "housing.csv")
@@ -114,18 +110,26 @@ def load_metrics():
     return json.loads((BASE / "metrics.json").read_text())
 
 
-if not (BASE / "model.joblib").exists():
-    st.error("model.joblib was not found. Run `python train_model.py` first, "
-             "then restart the app.")
-    st.stop()
+@st.cache_resource
+def load_model():
+    """Load the saved model. If the file is missing or was saved with a different
+    library version (common on cloud hosts), retrain the same model on the spot.
+    Training takes about a second, so the app always works."""
+    try:
+        return joblib.load(BASE / "model.joblib")
+    except Exception:
+        df = load_data()
+        return GradientBoostingRegressor(
+            n_estimators=200, max_depth=2, learning_rate=0.05, random_state=42
+        ).fit(df[["RM", "LSTAT", "PTRATIO"]], df["MEDV"])
+
 
 model, data, metrics = load_model(), load_data(), load_metrics()
 ranges = metrics["feature_ranges"]
-# slider bounds: whole numbers just outside the data range
 bounds = {k: (float(np.floor(v[0])), float(np.ceil(v[1]))) for k, v in ranges.items()}
 
 
-EXAMPLES = {  
+EXAMPLES = {   # the three clients from the project brief
     "Client 1": (5.0, 17.0, 15.0),
     "Client 2": (4.0, 32.0, 22.0),
     "Client 3": (8.0, 3.0, 12.0),
@@ -154,7 +158,6 @@ with st.sidebar:
     for name in EXAMPLES:
         st.button(name, on_click=load_example, args=(name,))
 
-
 user = pd.DataFrame([[rm, lstat, ptratio]], columns=["RM", "LSTAT", "PTRATIO"])
 price = float(model.predict(user)[0])
 low = max(price + metrics["interval"]["low"], 0)
@@ -176,6 +179,7 @@ tab_predict, tab_explore, tab_model = st.tabs(
 with tab_predict:
     left, right = st.columns([1.5, 1], gap="large")
     with left:
+        # &#36; is a dollar sign; it avoids Streamlit reading $...$ as math
         st.markdown(f"""
 <div class="hero">
   <div class="hero-label">Estimated price</div>
@@ -197,6 +201,7 @@ with tab_predict:
                       xaxis_title="Home price", yaxis_title="Neighborhoods")
     st.plotly_chart(style(fig, 320, "x"))
 
+    # inputs outside the training range -> be honest about it
     out = [LABELS[c] for c, v in zip(("RM", "LSTAT", "PTRATIO"), (rm, lstat, ptratio))
            if not ranges[c][0] <= v <= ranges[c][1]]
     if out:
@@ -224,6 +229,7 @@ with tab_explore:
             direction = "rises" if corr > 0 else "falls"
             st.metric("Correlation with price", f"{corr:+.2f}")
             st.caption(f"Price generally {direction} as this value goes up.")
+
 
 with tab_model:
     t = metrics["test"]
